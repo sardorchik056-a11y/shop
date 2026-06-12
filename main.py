@@ -9,11 +9,10 @@ from datetime import date, datetime
 # ─────────────────────────────────────────
 
 BOT_TOKEN      = "8610804137:AAFkdrZIDRAsdhn4fZP51-rcnrI5C8d4xpg"
-CRYPTO_TOKEN   = "582363:AALEf7JOugnrQyrkMHzH5UrO7pdOjjYnTQy"   # токен от @CryptoBot → @send
-CRYPTO_API_URL = "https://pay.crypt.bot/api"  # mainnet
-# Для теста: "https://testnet-pay.crypt.bot/api"
+CRYPTO_TOKEN   = "582363:AALEf7JOugnrQyrkMHzH5UrO7pdOjjYnTQy"
+CRYPTO_API_URL = "https://pay.crypt.bot/api"
 
-ADMIN_IDS = {8118184388}  # ← ваш Telegram ID
+ADMIN_IDS = {8118184388}
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -58,13 +57,12 @@ def init_db():
             status      TEXT DEFAULT 'pending'
         )
     """)
-    # дефолтные товары
     c.execute("SELECT COUNT(*) FROM products")
     if c.fetchone()[0] == 0:
         c.executemany("INSERT INTO products (id, name, price, stock) VALUES (?,?,?,?)", [
-            (1, "Авторег",  5.0, 100),
-            (2, "Токен",    5.0, 100),
-            (3, "QR-код",   5.0, 100),
+            (1, "Авторег", 5.0, 100),
+            (2, "Токен",   5.0, 100),
+            (3, "QR-код",  5.0, 100),
         ])
     conn.commit()
     conn.close()
@@ -146,7 +144,7 @@ def get_history(user_id):
 #  CRYPTOBOT API
 # ─────────────────────────────────────────
 
-def create_invoice(amount: float, user_id: int) -> dict | None:
+def create_invoice(amount: float, user_id: int):
     try:
         r = requests.post(
             f"{CRYPTO_API_URL}/createInvoice",
@@ -194,36 +192,47 @@ def check_invoice(invoice_id: str) -> str:
 
 
 # ─────────────────────────────────────────
-#  TEXT BUILDERS
+#  UI HELPERS
 # ─────────────────────────────────────────
 
+LINE  = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+LINE2 = "─ ─ ─ ─ ─ ─ ─ ─ ─ ─"
+
 def text_main(u):
-    days = days_in_project(u["joined"])
+    days  = days_in_project(u["joined"])
     uname = f"@{u['username']}" if u["username"] != "—" else "не указан"
     return (
-        f"👤 <b>Имя:</b> {u['full_name']}\n"
-        f"🆔 <b>ID:</b> <b>{u['user_id']}</b>\n"
-        f"📎 <b>Username:</b> <b>{uname}</b>\n"
-        f"💎 <b>Баланс:</b> <b>{u['balance']:.2f}$</b>\n"
-        f"🗓 <b>В проекте:</b> <b>{days} дн.</b>\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"<b>Выберите раздел:</b>"
+        f"┌─────────────────────┐\n"
+        f"│     👤  <b>МОЙ ПРОФИЛЬ</b>     │\n"
+        f"├─────────────────────┤\n"
+        f"│ 📛 <b>Имя:</b>  {u['full_name']}\n"
+        f"│ 🆔 <b>ID:</b>  <code>{u['user_id']}</code>\n"
+        f"│ 📎 <b>Ник:</b>  {uname}\n"
+        f"├─────────────────────┤\n"
+        f"│ 💎 <b>Баланс:</b>  <b>{u['balance']:.2f} $</b>\n"
+        f"│ 🗓 <b>В проекте:</b>  <b>{days} дн.</b>\n"
+        f"└─────────────────────┘\n\n"
+        f"<b>Выберите раздел 👇</b>"
     )
 
 def kb_main():
-    kb = types.InlineKeyboardMarkup(row_width=2)
-    kb.add(
-        types.InlineKeyboardButton("🛒 Купить",           callback_data="menu_buy"),
-        types.InlineKeyboardButton("💰 Баланс",           callback_data="menu_balance"),
-        types.InlineKeyboardButton("📊 Статистика",       callback_data="menu_stats"),
-        types.InlineKeyboardButton("📋 История покупок",  callback_data="menu_history"),
-        types.InlineKeyboardButton("🎧 Поддержка",        callback_data="menu_support"),
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
+        types.InlineKeyboardButton("🛒  Купить",     callback_data="menu_buy"),
+        types.InlineKeyboardButton("💰  Баланс",     callback_data="menu_balance"),
+    )
+    kb.row(
+        types.InlineKeyboardButton("📊  Статистика", callback_data="menu_stats"),
+        types.InlineKeyboardButton("📋  История",    callback_data="menu_history"),
+    )
+    kb.row(
+        types.InlineKeyboardButton("🎧  Поддержка",  callback_data="menu_support"),
     )
     return kb
 
 def kb_back():
     kb = types.InlineKeyboardMarkup()
-    kb.add(types.InlineKeyboardButton("🔙 Назад", callback_data="back_main"))
+    kb.row(types.InlineKeyboardButton("🔙 Главное меню", callback_data="back_main"))
     return kb
 
 
@@ -238,7 +247,7 @@ def cmd_start(msg: types.Message):
 
 
 # ─────────────────────────────────────────
-#  BACK TO MAIN
+#  BACK
 # ─────────────────────────────────────────
 
 @bot.callback_query_handler(func=lambda c: c.data == "back_main")
@@ -255,20 +264,26 @@ def cb_back(call: types.CallbackQuery):
 @bot.callback_query_handler(func=lambda c: c.data == "menu_balance")
 def cb_balance(call: types.CallbackQuery):
     u = get_or_create_user(call.from_user.id, call.from_user.username, call.from_user.full_name)
-    kb = types.InlineKeyboardMarkup(row_width=2)
-    kb.add(
-        types.InlineKeyboardButton("➕ 5$",   callback_data="topup_5"),
-        types.InlineKeyboardButton("➕ 10$",  callback_data="topup_10"),
-        types.InlineKeyboardButton("➕ 20$",  callback_data="topup_20"),
-        types.InlineKeyboardButton("➕ 50$",  callback_data="topup_50"),
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
+        types.InlineKeyboardButton("➕ 5$",  callback_data="topup_5"),
+        types.InlineKeyboardButton("➕ 10$", callback_data="topup_10"),
     )
-    kb.add(types.InlineKeyboardButton("🔙 Назад", callback_data="back_main"))
+    kb.row(
+        types.InlineKeyboardButton("➕ 20$", callback_data="topup_20"),
+        types.InlineKeyboardButton("➕ 50$", callback_data="topup_50"),
+    )
+    kb.row(types.InlineKeyboardButton("🔙 Главное меню", callback_data="back_main"))
     text = (
-        f"💰 <b>Баланс</b>\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"💎 <b>Текущий баланс:</b> <b>{u['balance']:.2f}$</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"<b>Выберите сумму пополнения (USDT):</b>"
+        f"┌─────────────────────┐\n"
+        f"│     💰  <b>БАЛАНС</b>          │\n"
+        f"├─────────────────────┤\n"
+        f"│ 💎 <b>Текущий баланс:</b>\n"
+        f"│     <b>{u['balance']:.2f} $</b>\n"
+        f"├─────────────────────┤\n"
+        f"│ 🪙 Пополнение через <b>USDT</b>\n"
+        f"│ Выберите сумму 👇\n"
+        f"└─────────────────────┘"
     )
     bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
                           parse_mode="HTML", reply_markup=kb)
@@ -280,21 +295,21 @@ def cb_topup(call: types.CallbackQuery):
     if not inv:
         bot.answer_callback_query(call.id, "❌ Ошибка создания счёта, попробуйте позже", show_alert=True)
         return
-
-    kb = types.InlineKeyboardMarkup(row_width=1)
-    kb.add(
-        types.InlineKeyboardButton("💳 Оплатить", url=inv["bot_invoice_url"]),
-        types.InlineKeyboardButton("✅ Проверить оплату", callback_data=f"check_{inv['invoice_id']}"),
-        types.InlineKeyboardButton("🔙 Назад", callback_data="menu_balance"),
-    )
+    kb = types.InlineKeyboardMarkup()
+    kb.row(types.InlineKeyboardButton("💳 Оплатить через CryptoBot", url=inv["bot_invoice_url"]))
+    kb.row(types.InlineKeyboardButton("✅ Проверить оплату", callback_data=f"check_{inv['invoice_id']}"))
+    kb.row(types.InlineKeyboardButton("🔙 Назад", callback_data="menu_balance"))
     text = (
-        f"💳 <b>Пополнение баланса</b>\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"💵 <b>Сумма:</b> <b>{amount}$</b>\n"
-        f"🪙 <b>Валюта:</b> <b>USDT</b>\n"
-        f"⏱ <b>Действует:</b> <b>1 час</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"<b>Нажмите «Оплатить», затем «Проверить оплату»</b>"
+        f"┌─────────────────────┐\n"
+        f"│    💳  <b>ПОПОЛНЕНИЕ</b>        │\n"
+        f"├─────────────────────┤\n"
+        f"│ 💵 <b>Сумма:</b>  <b>{amount} $</b>\n"
+        f"│ 🪙 <b>Валюта:</b>  <b>USDT</b>\n"
+        f"│ ⏱ <b>Срок:</b>  <b>1 час</b>\n"
+        f"├─────────────────────┤\n"
+        f"│ 1️⃣ Нажмите <b>«Оплатить»</b>\n"
+        f"│ 2️⃣ Нажмите <b>«Проверить»</b>\n"
+        f"└─────────────────────┘"
     )
     bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
                           parse_mode="HTML", reply_markup=kb)
@@ -303,7 +318,6 @@ def cb_topup(call: types.CallbackQuery):
 def cb_check(call: types.CallbackQuery):
     invoice_id = call.data.split("_", 1)[1]
     status = check_invoice(invoice_id)
-
     if status == "paid":
         conn = db()
         c_db = conn.cursor()
@@ -316,10 +330,12 @@ def cb_check(call: types.CallbackQuery):
             conn.close()
             u = get_or_create_user(call.from_user.id, call.from_user.username, call.from_user.full_name)
             bot.edit_message_text(
-                f"✅ <b>Баланс пополнен!</b>\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"💎 <b>Новый баланс:</b> <b>{u['balance']:.2f}$</b>\n"
-                f"━━━━━━━━━━━━━━━━━━━━",
+                f"┌─────────────────────┐\n"
+                f"│   ✅  <b>ОПЛАТА ПРИНЯТА</b>    │\n"
+                f"├─────────────────────┤\n"
+                f"│ 💰 <b>Зачислено:</b>  <b>{row[1]} $</b>\n"
+                f"│ 💎 <b>Баланс:</b>  <b>{u['balance']:.2f} $</b>\n"
+                f"└─────────────────────┘",
                 call.message.chat.id, call.message.message_id,
                 parse_mode="HTML", reply_markup=kb_back()
             )
@@ -339,22 +355,40 @@ def cb_check(call: types.CallbackQuery):
 @bot.callback_query_handler(func=lambda c: c.data == "menu_buy")
 def cb_buy_menu(call: types.CallbackQuery):
     products = get_products()
-    kb = types.InlineKeyboardMarkup(row_width=1)
-    for p in products:
-        pid, name, price, stock = p
-        stock_txt = f"{stock} шт." if stock > 0 else "❌ нет"
-        kb.add(types.InlineKeyboardButton(
-            f"{'🛒' if stock>0 else '🚫'} {name} — {price}$ | {stock_txt}",
-            callback_data=f"product_{pid}"
-        ))
-    kb.add(types.InlineKeyboardButton("🔙 Назад", callback_data="back_main"))
-    bot.edit_message_text(
-        f"🛒 <b>Магазин</b>\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"<b>Выберите товар:</b>",
-        call.message.chat.id, call.message.message_id,
-        parse_mode="HTML", reply_markup=kb
+    u = get_or_create_user(call.from_user.id, call.from_user.username, call.from_user.full_name)
+
+    # Строим текст со всеми товарами
+    lines = ""
+    for pid, name, price, stock in products:
+        status = "✅ В наличии" if stock > 0 else "❌ Нет"
+        lines += f"│ {'🛒' if stock > 0 else '🚫'} <b>{name}</b>\n│    💵 <b>{price}$</b>  •  📦 <b>{stock} шт.</b>  •  {status}\n"
+
+    kb = types.InlineKeyboardMarkup()
+    for pid, name, price, stock in products:
+        if stock > 0:
+            kb.row(types.InlineKeyboardButton(
+                f"🛒 {name}  —  {price}$",
+                callback_data=f"product_{pid}"
+            ))
+        else:
+            kb.row(types.InlineKeyboardButton(
+                f"🚫 {name}  —  нет в наличии",
+                callback_data=f"product_{pid}"
+            ))
+    kb.row(types.InlineKeyboardButton("🔙 Главное меню", callback_data="back_main"))
+
+    text = (
+        f"┌─────────────────────┐\n"
+        f"│     🛒  <b>МАГАЗИН</b>          │\n"
+        f"├─────────────────────┤\n"
+        f"│ 💎 <b>Ваш баланс:</b>  <b>{u['balance']:.2f}$</b>\n"
+        f"├─────────────────────┤\n"
+        f"{lines}"
+        f"└─────────────────────┘\n\n"
+        f"<b>Выберите товар 👇</b>"
     )
+    bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
+                          parse_mode="HTML", reply_markup=kb)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("product_"))
 def cb_product(call: types.CallbackQuery):
@@ -364,17 +398,21 @@ def cb_product(call: types.CallbackQuery):
         bot.answer_callback_query(call.id, "Товар не найден", show_alert=True)
         return
     _, name, price, stock = p
-    kb = types.InlineKeyboardMarkup(row_width=1)
+    kb = types.InlineKeyboardMarkup()
     if stock > 0:
-        kb.add(types.InlineKeyboardButton(f"✅ Купить за {price}$", callback_data=f"confirm_{pid}"))
-    kb.add(types.InlineKeyboardButton("🔙 Назад", callback_data="menu_buy"))
+        kb.row(types.InlineKeyboardButton(f"✅ Купить за {price}$", callback_data=f"confirm_{pid}"))
+    kb.row(types.InlineKeyboardButton("🔙 Назад", callback_data="menu_buy"))
+
+    avail = "✅ В наличии" if stock > 0 else "❌ Нет в наличии"
     text = (
-        f"📦 <b>{name}</b>\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"💵 <b>Цена:</b> <b>{price}$</b>\n"
-        f"📦 <b>Остаток:</b> <b>{stock} шт.</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"{'<b>Нажмите «Купить» для оформления</b>' if stock > 0 else '<b>❌ Товар закончился</b>'}"
+        f"┌─────────────────────┐\n"
+        f"│   📦  <b>{name}</b>\n"
+        f"├─────────────────────┤\n"
+        f"│ 💵 <b>Цена:</b>  <b>{price}$</b>\n"
+        f"│ 📦 <b>Остаток:</b>  <b>{stock} шт.</b>\n"
+        f"│ 🔖 <b>Статус:</b>  {avail}\n"
+        f"└─────────────────────┘\n\n"
+        f"{'<b>Нажмите кнопку для покупки 👇</b>' if stock > 0 else '<b>Товар временно недоступен</b>'}"
     )
     bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
                           parse_mode="HTML", reply_markup=kb)
@@ -389,11 +427,12 @@ def cb_confirm(call: types.CallbackQuery):
         return
     _, name, price, stock = p
     if u["balance"] < price:
-        bot.answer_callback_query(call.id,
-            f"❌ Недостаточно средств!\nНужно: {price}$\nВаш баланс: {u['balance']:.2f}$",
-            show_alert=True)
+        bot.answer_callback_query(
+            call.id,
+            f"❌ Недостаточно средств!\nНужно: {price}$  |  Баланс: {u['balance']:.2f}$",
+            show_alert=True
+        )
         return
-    # Списываем
     conn = db()
     c_db = conn.cursor()
     c_db.execute("UPDATE users SET balance=balance-? WHERE user_id=?", (price, u["user_id"]))
@@ -404,12 +443,13 @@ def cb_confirm(call: types.CallbackQuery):
     conn.close()
     new_balance = u["balance"] - price
     bot.edit_message_text(
-        f"✅ <b>Покупка успешна!</b>\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"📦 <b>Товар:</b> <b>{name}</b>\n"
-        f"💸 <b>Списано:</b> <b>{price}$</b>\n"
-        f"💎 <b>Остаток:</b> <b>{new_balance:.2f}$</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━",
+        f"┌─────────────────────┐\n"
+        f"│   ✅  <b>ПОКУПКА УСПЕШНА</b>   │\n"
+        f"├─────────────────────┤\n"
+        f"│ 📦 <b>Товар:</b>  <b>{name}</b>\n"
+        f"│ 💸 <b>Списано:</b>  <b>{price}$</b>\n"
+        f"│ 💎 <b>Остаток:</b>  <b>{new_balance:.2f}$</b>\n"
+        f"└─────────────────────┘",
         call.message.chat.id, call.message.message_id,
         parse_mode="HTML", reply_markup=kb_back()
     )
@@ -425,14 +465,16 @@ def cb_stats(call: types.CallbackQuery):
     orders, spent, total_users = get_stats(u["user_id"])
     days = days_in_project(u["joined"])
     text = (
-        f"📊 <b>Статистика</b>\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"🛒 <b>Покупок:</b> <b>{orders}</b>\n"
-        f"💸 <b>Потрачено:</b> <b>{spent:.2f}$</b>\n"
-        f"💎 <b>Баланс:</b> <b>{u['balance']:.2f}$</b>\n"
-        f"🗓 <b>В проекте:</b> <b>{days} дн.</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"👥 <b>Пользователей в боте:</b> <b>{total_users}</b>"
+        f"┌─────────────────────┐\n"
+        f"│    📊  <b>СТАТИСТИКА</b>        │\n"
+        f"├─────────────────────┤\n"
+        f"│ 🛒 <b>Покупок:</b>  <b>{orders}</b>\n"
+        f"│ 💸 <b>Потрачено:</b>  <b>{spent:.2f}$</b>\n"
+        f"│ 💎 <b>Баланс:</b>  <b>{u['balance']:.2f}$</b>\n"
+        f"│ 🗓 <b>В проекте:</b>  <b>{days} дн.</b>\n"
+        f"├─────────────────────┤\n"
+        f"│ 👥 <b>Всего юзеров:</b>  <b>{total_users}</b>\n"
+        f"└─────────────────────┘"
     )
     bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
                           parse_mode="HTML", reply_markup=kb_back())
@@ -448,21 +490,24 @@ def cb_history(call: types.CallbackQuery):
     rows = get_history(u["user_id"])
     if not rows:
         text = (
-            f"📋 <b>История покупок</b>\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"<b>😔 Покупок пока нет</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━"
+            f"┌─────────────────────┐\n"
+            f"│  📋  <b>ИСТОРИЯ ПОКУПОК</b>   │\n"
+            f"├─────────────────────┤\n"
+            f"│  😔 Покупок пока нет\n"
+            f"└─────────────────────┘"
         )
     else:
         lines = ""
         for i, (name, amount, dt) in enumerate(rows, 1):
-            lines += f"<b>{i}.</b> <b>{name}</b> — <b>{amount:.2f}$</b> · <b>{dt[:10]}</b>\n"
+            lines += f"│ <b>{i}.</b> <b>{name}</b>  —  <b>{amount:.2f}$</b>\n│     🗓 {dt[:10]}\n"
         text = (
-            f"📋 <b>История покупок</b>\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"┌─────────────────────┐\n"
+            f"│  📋  <b>ИСТОРИЯ ПОКУПОК</b>   │\n"
+            f"├─────────────────────┤\n"
             f"{lines}"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"<b>Последние {len(rows)} операций</b>"
+            f"├─────────────────────┤\n"
+            f"│ Последние <b>{len(rows)}</b> операций\n"
+            f"└─────────────────────┘"
         )
     bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
                           parse_mode="HTML", reply_markup=kb_back())
@@ -474,18 +519,18 @@ def cb_history(call: types.CallbackQuery):
 
 @bot.callback_query_handler(func=lambda c: c.data == "menu_support")
 def cb_support(call: types.CallbackQuery):
-    kb = types.InlineKeyboardMarkup(row_width=1)
-    kb.add(
-        types.InlineKeyboardButton("✉️ Написать оператору", url="https://t.me/username"),
-        types.InlineKeyboardButton("🔙 Назад", callback_data="back_main"),
-    )
+    kb = types.InlineKeyboardMarkup()
+    kb.row(types.InlineKeyboardButton("✉️ Написать оператору", url="https://t.me/username"))
+    kb.row(types.InlineKeyboardButton("🔙 Главное меню", callback_data="back_main"))
     text = (
-        f"🎧 <b>Поддержка</b>\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"<b>Мы рады помочь!</b>\n\n"
-        f"⏱ <b>Время ответа:</b> <b>до 15 минут</b>\n"
-        f"🕐 <b>Режим работы:</b> <b>10:00 – 22:00</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━"
+        f"┌─────────────────────┐\n"
+        f"│     🎧  <b>ПОДДЕРЖКА</b>        │\n"
+        f"├─────────────────────┤\n"
+        f"│ Мы рады помочь!\n"
+        f"├─────────────────────┤\n"
+        f"│ ⏱ <b>Ответ:</b>  до <b>15 минут</b>\n"
+        f"│ 🕐 <b>Работаем:</b>  <b>10:00–22:00</b>\n"
+        f"└─────────────────────┘"
     )
     bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
                           parse_mode="HTML", reply_markup=kb)
@@ -498,36 +543,43 @@ def cb_support(call: types.CallbackQuery):
 def is_admin(user_id):
     return user_id in ADMIN_IDS
 
+admin_states = {}
+
 @bot.message_handler(commands=["admin"])
 def cmd_admin(msg: types.Message):
     if not is_admin(msg.from_user.id):
         return
-    kb = types.InlineKeyboardMarkup(row_width=1)
-    kb.add(
-        types.InlineKeyboardButton("📦 Управление товарами", callback_data="adm_products"),
-        types.InlineKeyboardButton("💰 Начислить баланс",    callback_data="adm_topup_form"),
-        types.InlineKeyboardButton("📊 Общая статистика",    callback_data="adm_stats"),
+    kb = types.InlineKeyboardMarkup()
+    kb.row(types.InlineKeyboardButton("📦 Управление товарами", callback_data="adm_products"))
+    kb.row(types.InlineKeyboardButton("💰 Начислить баланс",    callback_data="adm_topup_form"))
+    kb.row(types.InlineKeyboardButton("📊 Общая статистика",    callback_data="adm_stats"))
+    bot.send_message(
+        msg.chat.id,
+        f"┌─────────────────────┐\n"
+        f"│    🔧  <b>АДМИН-ПАНЕЛЬ</b>      │\n"
+        f"└─────────────────────┘\n\n"
+        f"<b>Выберите действие 👇</b>",
+        parse_mode="HTML", reply_markup=kb
     )
-    bot.send_message(msg.chat.id,
-        f"🔧 <b>Админ-панель</b>\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"<b>Выберите действие:</b>",
-        parse_mode="HTML", reply_markup=kb)
 
 @bot.callback_query_handler(func=lambda c: c.data == "adm_products")
 def cb_adm_products(call: types.CallbackQuery):
     if not is_admin(call.from_user.id): return
     products = get_products()
-    kb = types.InlineKeyboardMarkup(row_width=1)
+    kb = types.InlineKeyboardMarkup()
     for p in products:
         pid, name, price, stock = p
-        kb.add(types.InlineKeyboardButton(
-            f"✏️ {name} | {price}$ | {stock} шт.",
+        kb.row(types.InlineKeyboardButton(
+            f"✏️ {name}  |  {price}$  |  {stock} шт.",
             callback_data=f"adm_edit_{pid}"
         ))
-    kb.add(types.InlineKeyboardButton("🔙 Назад", callback_data="adm_back"))
+    kb.row(types.InlineKeyboardButton("🔙 Назад", callback_data="adm_back"))
     bot.edit_message_text(
-        f"📦 <b>Товары</b>\n\n<b>Выберите товар для редактирования:</b>",
+        f"┌─────────────────────┐\n"
+        f"│   📦  <b>ТОВАРЫ</b>             │\n"
+        f"├─────────────────────┤\n"
+        f"│ Выберите для редакт. 👇\n"
+        f"└─────────────────────┘",
         call.message.chat.id, call.message.message_id,
         parse_mode="HTML", reply_markup=kb
     )
@@ -539,32 +591,31 @@ def cb_adm_edit(call: types.CallbackQuery):
     p = get_product(pid)
     if not p: return
     _, name, price, stock = p
-    kb = types.InlineKeyboardMarkup(row_width=2)
-    kb.add(
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
         types.InlineKeyboardButton("💵 Изменить цену",    callback_data=f"adm_price_{pid}"),
         types.InlineKeyboardButton("📦 Изменить остаток", callback_data=f"adm_stock_{pid}"),
-        types.InlineKeyboardButton("🔙 Назад", callback_data="adm_products"),
     )
+    kb.row(types.InlineKeyboardButton("🔙 Назад", callback_data="adm_products"))
     bot.edit_message_text(
-        f"✏️ <b>Редактирование: {name}</b>\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"💵 <b>Цена:</b> <b>{price}$</b>\n"
-        f"📦 <b>Остаток:</b> <b>{stock} шт.</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━",
+        f"┌─────────────────────┐\n"
+        f"│  ✏️  <b>РЕДАКТИРОВАНИЕ</b>      │\n"
+        f"├─────────────────────┤\n"
+        f"│ 📦 <b>Товар:</b>  <b>{name}</b>\n"
+        f"│ 💵 <b>Цена:</b>  <b>{price}$</b>\n"
+        f"│ 📦 <b>Остаток:</b>  <b>{stock} шт.</b>\n"
+        f"└─────────────────────┘",
         call.message.chat.id, call.message.message_id,
         parse_mode="HTML", reply_markup=kb
     )
-
-# Хранилище состояний
-admin_states = {}
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("adm_price_"))
 def cb_adm_set_price(call: types.CallbackQuery):
     if not is_admin(call.from_user.id): return
     pid = int(call.data.split("_")[2])
-    admin_states[call.from_user.id] = {"action": "set_price", "pid": pid, "msg_id": call.message.message_id}
+    admin_states[call.from_user.id] = {"action": "set_price", "pid": pid}
     bot.edit_message_text(
-        f"💵 <b>Введите новую цену (в $):</b>",
+        f"💵 <b>Введите новую цену в $:</b>",
         call.message.chat.id, call.message.message_id, parse_mode="HTML"
     )
 
@@ -572,7 +623,7 @@ def cb_adm_set_price(call: types.CallbackQuery):
 def cb_adm_set_stock(call: types.CallbackQuery):
     if not is_admin(call.from_user.id): return
     pid = int(call.data.split("_")[2])
-    admin_states[call.from_user.id] = {"action": "set_stock", "pid": pid, "msg_id": call.message.message_id}
+    admin_states[call.from_user.id] = {"action": "set_stock", "pid": pid}
     bot.edit_message_text(
         f"📦 <b>Введите новый остаток (шт.):</b>",
         call.message.chat.id, call.message.message_id, parse_mode="HTML"
@@ -581,7 +632,7 @@ def cb_adm_set_stock(call: types.CallbackQuery):
 @bot.callback_query_handler(func=lambda c: c.data == "adm_topup_form")
 def cb_adm_topup_form(call: types.CallbackQuery):
     if not is_admin(call.from_user.id): return
-    admin_states[call.from_user.id] = {"action": "topup", "msg_id": call.message.message_id}
+    admin_states[call.from_user.id] = {"action": "topup"}
     bot.edit_message_text(
         f"💰 <b>Введите: user_id сумма</b>\n<b>Пример:</b> <code>123456789 10</code>",
         call.message.chat.id, call.message.message_id, parse_mode="HTML"
@@ -598,14 +649,15 @@ def cb_adm_stats(call: types.CallbackQuery):
     total_orders, total_revenue = c_db.fetchone()
     conn.close()
     kb = types.InlineKeyboardMarkup()
-    kb.add(types.InlineKeyboardButton("🔙 Назад", callback_data="adm_back"))
+    kb.row(types.InlineKeyboardButton("🔙 Назад", callback_data="adm_back"))
     bot.edit_message_text(
-        f"📊 <b>Общая статистика</b>\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"👥 <b>Пользователей:</b> <b>{total_users}</b>\n"
-        f"🛒 <b>Покупок:</b> <b>{total_orders}</b>\n"
-        f"💸 <b>Выручка:</b> <b>{total_revenue:.2f}$</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━",
+        f"┌─────────────────────┐\n"
+        f"│   📊  <b>СТАТИСТИКА</b>         │\n"
+        f"├─────────────────────┤\n"
+        f"│ 👥 <b>Пользователей:</b>  <b>{total_users}</b>\n"
+        f"│ 🛒 <b>Покупок:</b>  <b>{total_orders}</b>\n"
+        f"│ 💸 <b>Выручка:</b>  <b>{total_revenue:.2f}$</b>\n"
+        f"└─────────────────────┘",
         call.message.chat.id, call.message.message_id,
         parse_mode="HTML", reply_markup=kb
     )
@@ -613,16 +665,15 @@ def cb_adm_stats(call: types.CallbackQuery):
 @bot.callback_query_handler(func=lambda c: c.data == "adm_back")
 def cb_adm_back(call: types.CallbackQuery):
     if not is_admin(call.from_user.id): return
-    kb = types.InlineKeyboardMarkup(row_width=1)
-    kb.add(
-        types.InlineKeyboardButton("📦 Управление товарами", callback_data="adm_products"),
-        types.InlineKeyboardButton("💰 Начислить баланс",    callback_data="adm_topup_form"),
-        types.InlineKeyboardButton("📊 Общая статистика",    callback_data="adm_stats"),
-    )
+    kb = types.InlineKeyboardMarkup()
+    kb.row(types.InlineKeyboardButton("📦 Управление товарами", callback_data="adm_products"))
+    kb.row(types.InlineKeyboardButton("💰 Начислить баланс",    callback_data="adm_topup_form"))
+    kb.row(types.InlineKeyboardButton("📊 Общая статистика",    callback_data="adm_stats"))
     bot.edit_message_text(
-        f"🔧 <b>Админ-панель</b>\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"<b>Выберите действие:</b>",
+        f"┌─────────────────────┐\n"
+        f"│    🔧  <b>АДМИН-ПАНЕЛЬ</b>      │\n"
+        f"└─────────────────────┘\n\n"
+        f"<b>Выберите действие 👇</b>",
         call.message.chat.id, call.message.message_id,
         parse_mode="HTML", reply_markup=kb
     )
@@ -638,7 +689,7 @@ def handle_admin_input(msg: types.Message):
             update_product(state["pid"], price=price)
             p = get_product(state["pid"])
             bot.send_message(msg.chat.id,
-                f"✅ <b>Цена обновлена!</b>\n<b>{p[1]}</b> → <b>{p[2]}$</b>",
+                f"✅ <b>Цена обновлена!</b>\n<b>{p[1]}</b>  →  <b>{p[2]}$</b>",
                 parse_mode="HTML")
         except:
             bot.send_message(msg.chat.id, "❌ <b>Неверный формат. Введите число.</b>", parse_mode="HTML")
@@ -649,7 +700,7 @@ def handle_admin_input(msg: types.Message):
             update_product(state["pid"], stock=stock)
             p = get_product(state["pid"])
             bot.send_message(msg.chat.id,
-                f"✅ <b>Остаток обновлён!</b>\n<b>{p[1]}</b> → <b>{p[3]} шт.</b>",
+                f"✅ <b>Остаток обновлён!</b>\n<b>{p[1]}</b>  →  <b>{p[3]} шт.</b>",
                 parse_mode="HTML")
         except:
             bot.send_message(msg.chat.id, "❌ <b>Неверный формат. Введите целое число.</b>", parse_mode="HTML")
@@ -663,10 +714,15 @@ def handle_admin_input(msg: types.Message):
             conn.commit()
             conn.close()
             bot.send_message(msg.chat.id,
-                f"✅ <b>Начислено {amount}$ пользователю {uid}</b>", parse_mode="HTML")
+                f"✅ <b>Начислено {amount}$ → пользователю {uid}</b>", parse_mode="HTML")
             try:
                 bot.send_message(uid,
-                    f"💰 <b>Вам начислено {amount}$</b>\n<b>Пополнение от администратора</b>",
+                    f"┌─────────────────────┐\n"
+                    f"│   💰  <b>ПОПОЛНЕНИЕ</b>        │\n"
+                    f"├─────────────────────┤\n"
+                    f"│ Администратор зачислил\n"
+                    f"│ <b>{amount}$</b> на ваш баланс\n"
+                    f"└─────────────────────┘",
                     parse_mode="HTML")
             except:
                 pass
