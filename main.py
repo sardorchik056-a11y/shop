@@ -212,30 +212,29 @@ def text_main(u):
     uname = f"@{u['username']}" if u["username"] != "—" else "не указан"
     return (
         f"┌─────────────────────┐\n"
-        f"│     👤  <b>МОЙ ПРОФИЛЬ</b>     │\n"
+        f"│     💼  <b>ПРОФИЛЬ</b>     │\n"
         f"├─────────────────────┤\n"
-        f"│ 📛 <b>Имя:</b>  {u['full_name']}\n"
+        f"│ 👤 <b>Имя:</b>  {u['full_name']}\n"
         f"│ 🆔 <b>ID:</b>  <code>{u['user_id']}</code>\n"
         f"│ 📎 <b>Ник:</b>  {uname}\n"
         f"├─────────────────────┤\n"
         f"│ 💎 <b>Баланс:</b>  <b>{u['balance']:.2f} $</b>\n"
         f"│ 🗓 <b>В проекте:</b>  <b>{days} дн.</b>\n"
         f"└─────────────────────┘\n\n"
-        f"<b>Выберите раздел 👇</b>"
     )
 
 def kb_main():
     kb = types.InlineKeyboardMarkup()
     kb.row(
-        types.InlineKeyboardButton("🛒  Купить",     callback_data="menu_buy"),
-        types.InlineKeyboardButton("💰  Баланс",     callback_data="menu_balance"),
+        types.InlineKeyboardButton("📄  Купить",     callback_data="menu_buy"),
+        types.InlineKeyboardButton("💎  Баланс",     callback_data="menu_balance"),
     )
     kb.row(
         types.InlineKeyboardButton("📊  Статистика", callback_data="menu_stats"),
         types.InlineKeyboardButton("📋  История",    callback_data="menu_history"),
     )
     kb.row(
-        types.InlineKeyboardButton("🎧  Поддержка",  url=SUPPORT_URL),
+        types.InlineKeyboardButton("❗️  Поддержка",  url=SUPPORT_URL),
     )
     return kb
 
@@ -290,7 +289,6 @@ def cb_balance(call: types.CallbackQuery):
         f"│ 💎 <b>Текущий баланс:</b>\n"
         f"│     <b>{u['balance']:.2f} $</b>\n"
         f"├─────────────────────┤\n"
-        f"│ 🪙 Пополнение через <b>USDT</b>\n"
         f"│ Выберите сумму 👇\n"
         f"└─────────────────────┘"
     )
@@ -305,7 +303,7 @@ def cb_topup(call: types.CallbackQuery):
         bot.answer_callback_query(call.id, "❌ Ошибка создания счёта, попробуйте позже", show_alert=True)
         return
     kb = types.InlineKeyboardMarkup()
-    kb.row(types.InlineKeyboardButton("💳 Оплатить через CryptoBot", url=inv["bot_invoice_url"]))
+    kb.row(types.InlineKeyboardButton("💳 Оплатить", url=inv["bot_invoice_url"]))
     kb.row(types.InlineKeyboardButton("✅ Проверить оплату", callback_data=f"check_{inv['invoice_id']}"))
     kb.row(types.InlineKeyboardButton("🔙 Назад", callback_data="menu_balance"))
     text = (
@@ -369,7 +367,7 @@ def cb_buy_menu(call: types.CallbackQuery):
     lines = ""
     for pid, name, price, stock, min_qty in products:
         status = "✅ В наличии" if stock > 0 else "❌ Нет"
-        lines += f"│ {'🛒' if stock > 0 else '🚫'} <b>{name}</b>\n│    💵 <b>{price}$</b>  •  📦 <b>{stock} шт.</b>  •  🔢 мин. <b>{min_qty}</b>  •  {status}\n"
+        lines += f"│ {'🛒' if stock > 0 else '🚫'} <b>{name}</b>\n│    💵 <b>{price}$</b>  •  📦 <b>{stock} шт.</b>  •  {status}\n"
 
     kb = types.InlineKeyboardMarkup()
     for pid, name, price, stock, min_qty in products:
