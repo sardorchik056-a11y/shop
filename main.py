@@ -8,7 +8,7 @@ from datetime import date, datetime
 #  CONFIG
 # ─────────────────────────────────────────
 
-BOT_TOKEN      = "8610804137:AAFkdrZIDRAsdhn4fZP51-rcnrI5C8d4xpg"
+BOT_TOKEN      = "8607716276:AAH-zY7Zk0hrDLFRdWSqp9IiXxiaBbWJbfM"
 CRYPTO_TOKEN   = "582363:AALEf7JOugnrQyrkMHzH5UrO7pdOjjYnTQy"
 CRYPTO_API_URL = "https://pay.crypt.bot/api"
 
