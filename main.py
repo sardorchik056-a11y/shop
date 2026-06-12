@@ -836,10 +836,44 @@ def handle_admin_input(msg: types.Message):
 
 
 # ─────────────────────────────────────────
-#  LAUNCH
+#  WEBHOOK  (Render)
 # ─────────────────────────────────────────
+
+import os
+from flask import Flask, request, abort
+
+app = Flask(__name__)
+
+# инициализируем БД при старте
+with app.app_context():
+    init_db()
+
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")   # опционально
+RENDER_URL      = os.environ.get("RENDER_URL", "")       # https://your-app.onrender.com
+
+@app.route(f"/webhook/{BOT_TOKEN}", methods=["POST"])
+def webhook():
+    if WEBHOOK_SECRET:
+        if request.headers.get("X-Telegram-Bot-Api-Secret-Token") != WEBHOOK_SECRET:
+            abort(403)
+    json_data = request.get_data(as_text=True)
+    update   = telebot.types.Update.de_json(json_data)
+    bot.process_new_updates([update])
+    return "ok", 200
+
+@app.route("/", methods=["GET"])
+def index():
+    return "Bot is running", 200
+
+def set_webhook():
+    url = f"{RENDER_URL}/webhook/{BOT_TOKEN}"
+    bot.remove_webhook()
+    bot.set_webhook(url=url)
+    print(f"✅ Webhook установлен: {url}")
 
 if __name__ == "__main__":
     init_db()
-    print("🤖 Бот запущен...")
-    bot.infinity_polling()
+    set_webhook()
+    port = int(os.environ.get("PORT", 8080))
+    print(f"🤖 Бот запущен на порту {port}...")
+    app.run(host="0.0.0.0", port=port)
