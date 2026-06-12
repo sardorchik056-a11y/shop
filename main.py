@@ -12,7 +12,8 @@ BOT_TOKEN      = "8610804137:AAFkdrZIDRAsdhn4fZP51-rcnrI5C8d4xpg"
 CRYPTO_TOKEN   = "582363:AALEf7JOugnrQyrkMHzH5UrO7pdOjjYnTQy"
 CRYPTO_API_URL = "https://pay.crypt.bot/api"
 
-ADMIN_IDS = {8118184388}
+ADMIN_IDS    = {8118184388}
+SUPPORT_URL  = "https://t.me/username"   # ← ссылка на поддержку
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -37,9 +38,15 @@ def init_db():
             id      INTEGER PRIMARY KEY,
             name    TEXT,
             price   REAL,
-            stock   INTEGER
+            stock   INTEGER,
+            min_qty INTEGER DEFAULT 10
         )
     """)
+    # миграция для существующей БД
+    try:
+        c.execute("ALTER TABLE products ADD COLUMN min_qty INTEGER DEFAULT 10")
+    except:
+        pass
     c.execute("""
         CREATE TABLE IF NOT EXISTS purchases (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,7 +95,7 @@ def get_or_create_user(user_id, username, full_name):
 def get_products():
     conn = db()
     c = conn.cursor()
-    c.execute("SELECT id,name,price,stock FROM products")
+    c.execute("SELECT id,name,price,stock,min_qty FROM products")
     rows = c.fetchall()
     conn.close()
     return rows
@@ -96,18 +103,20 @@ def get_products():
 def get_product(pid):
     conn = db()
     c = conn.cursor()
-    c.execute("SELECT id,name,price,stock FROM products WHERE id=?", (pid,))
+    c.execute("SELECT id,name,price,stock,min_qty FROM products WHERE id=?", (pid,))
     row = c.fetchone()
     conn.close()
     return row
 
-def update_product(pid, price=None, stock=None):
+def update_product(pid, price=None, stock=None, min_qty=None):
     conn = db()
     c = conn.cursor()
     if price is not None:
         c.execute("UPDATE products SET price=? WHERE id=?", (price, pid))
     if stock is not None:
         c.execute("UPDATE products SET stock=? WHERE id=?", (stock, pid))
+    if min_qty is not None:
+        c.execute("UPDATE products SET min_qty=? WHERE id=?", (min_qty, pid))
     conn.commit()
     conn.close()
 
@@ -226,7 +235,7 @@ def kb_main():
         types.InlineKeyboardButton("📋  История",    callback_data="menu_history"),
     )
     kb.row(
-        types.InlineKeyboardButton("🎧  Поддержка",  callback_data="menu_support"),
+        types.InlineKeyboardButton("🎧  Поддержка",  url=SUPPORT_URL),
     )
     return kb
 
@@ -357,14 +366,13 @@ def cb_buy_menu(call: types.CallbackQuery):
     products = get_products()
     u = get_or_create_user(call.from_user.id, call.from_user.username, call.from_user.full_name)
 
-    # Строим текст со всеми товарами
     lines = ""
-    for pid, name, price, stock in products:
+    for pid, name, price, stock, min_qty in products:
         status = "✅ В наличии" if stock > 0 else "❌ Нет"
-        lines += f"│ {'🛒' if stock > 0 else '🚫'} <b>{name}</b>\n│    💵 <b>{price}$</b>  •  📦 <b>{stock} шт.</b>  •  {status}\n"
+        lines += f"│ {'🛒' if stock > 0 else '🚫'} <b>{name}</b>\n│    💵 <b>{price}$</b>  •  📦 <b>{stock} шт.</b>  •  🔢 мин. <b>{min_qty}</b>  •  {status}\n"
 
     kb = types.InlineKeyboardMarkup()
-    for pid, name, price, stock in products:
+    for pid, name, price, stock, min_qty in products:
         if stock > 0:
             kb.row(types.InlineKeyboardButton(
                 f"🛒 {name}  —  {price}$",
@@ -390,17 +398,66 @@ def cb_buy_menu(call: types.CallbackQuery):
     bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
                           parse_mode="HTML", reply_markup=kb)
 
-@bot.callback_query_handler(func=lambda c: c.data.startswith("product_"))
+@bot.callback_query_handler(func=lambda c: c.data.startswith("product_") and len(c.data.split("_")) == 2)
 def cb_product(call: types.CallbackQuery):
     pid = int(call.data.split("_")[1])
     p = get_product(pid)
     if not p:
         bot.answer_callback_query(call.id, "Товар не найден", show_alert=True)
         return
-    _, name, price, stock = p
+    _, name, price, stock, min_qty = p
+    avail = "✅ В наличии" if stock > 0 else "❌ Нет в наличии"
+    total = round(price * min_qty, 2)
+
     kb = types.InlineKeyboardMarkup()
     if stock > 0:
-        kb.row(types.InlineKeyboardButton(f"✅ Купить за {price}$", callback_data=f"confirm_{pid}"))
+        kb.row(
+            types.InlineKeyboardButton("➖", callback_data=f"qty_{pid}_{max(min_qty, min_qty)}"),
+            types.InlineKeyboardButton(f"  {min_qty} шт.  ", callback_data="noop"),
+            types.InlineKeyboardButton("➕", callback_data=f"qty_{pid}_{min_qty + min_qty}"),
+        )
+        kb.row(types.InlineKeyboardButton(
+            f"✅ Купить {min_qty} шт. за {total}$",
+            callback_data=f"confirm_{pid}_{min_qty}"
+        ))
+    kb.row(types.InlineKeyboardButton("🔙 Назад", callback_data="menu_buy"))
+
+    text = (
+        f"┌─────────────────────┐\n"
+        f"│   📦  <b>{name}</b>\n"
+        f"├─────────────────────┤\n"
+        f"│ 💵 <b>Цена за 1 шт.:</b>  <b>{price}$</b>\n"
+        f"│ 📦 <b>Остаток:</b>  <b>{stock} шт.</b>\n"
+        f"│ 🔢 <b>Мин. покупка:</b>  <b>{min_qty} шт.</b>\n"
+        f"│ 🔖 <b>Статус:</b>  {avail}\n"
+        f"└─────────────────────┘\n\n"
+        f"{'<b>Выберите количество 👇</b>' if stock > 0 else '<b>Товар временно недоступен</b>'}"
+    )
+    bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
+                          parse_mode="HTML", reply_markup=kb)
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("qty_"))
+def cb_qty(call: types.CallbackQuery):
+    parts = call.data.split("_")
+    pid, qty = int(parts[1]), int(parts[2])
+    p = get_product(pid)
+    if not p:
+        return
+    _, name, price, stock, min_qty = p
+    # ограничения: не ниже min_qty, не выше stock
+    qty = max(min_qty, min(qty, stock))
+    total = round(price * qty, 2)
+
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
+        types.InlineKeyboardButton("➖", callback_data=f"qty_{pid}_{max(min_qty, qty - min_qty)}"),
+        types.InlineKeyboardButton(f"  {qty} шт.  ", callback_data="noop"),
+        types.InlineKeyboardButton("➕", callback_data=f"qty_{pid}_{min(stock, qty + min_qty)}"),
+    )
+    kb.row(types.InlineKeyboardButton(
+        f"✅ Купить {qty} шт. за {total}$",
+        callback_data=f"confirm_{pid}_{qty}"
+    ))
     kb.row(types.InlineKeyboardButton("🔙 Назад", callback_data="menu_buy"))
 
     avail = "✅ В наличии" if stock > 0 else "❌ Нет в наличии"
@@ -408,47 +465,55 @@ def cb_product(call: types.CallbackQuery):
         f"┌─────────────────────┐\n"
         f"│   📦  <b>{name}</b>\n"
         f"├─────────────────────┤\n"
-        f"│ 💵 <b>Цена:</b>  <b>{price}$</b>\n"
+        f"│ 💵 <b>Цена за 1 шт.:</b>  <b>{price}$</b>\n"
         f"│ 📦 <b>Остаток:</b>  <b>{stock} шт.</b>\n"
+        f"│ 🔢 <b>Мин. покупка:</b>  <b>{min_qty} шт.</b>\n"
         f"│ 🔖 <b>Статус:</b>  {avail}\n"
         f"└─────────────────────┘\n\n"
-        f"{'<b>Нажмите кнопку для покупки 👇</b>' if stock > 0 else '<b>Товар временно недоступен</b>'}"
+        f"<b>Выбрано:</b>  <b>{qty} шт.</b>  →  <b>{total}$</b>"
     )
     bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
                           parse_mode="HTML", reply_markup=kb)
 
+@bot.callback_query_handler(func=lambda c: c.data == "noop")
+def cb_noop(call: types.CallbackQuery):
+    bot.answer_callback_query(call.id)
+
 @bot.callback_query_handler(func=lambda c: c.data.startswith("confirm_"))
 def cb_confirm(call: types.CallbackQuery):
-    pid = int(call.data.split("_")[1])
+    parts = call.data.split("_")
+    pid, qty = int(parts[1]), int(parts[2])
     p = get_product(pid)
     u = get_or_create_user(call.from_user.id, call.from_user.username, call.from_user.full_name)
-    if not p or p[3] <= 0:
-        bot.answer_callback_query(call.id, "❌ Товар закончился", show_alert=True)
+    if not p or p[3] < qty:
+        bot.answer_callback_query(call.id, "❌ Недостаточно товара на складе", show_alert=True)
         return
-    _, name, price, stock = p
-    if u["balance"] < price:
+    _, name, price, stock, min_qty = p
+    total = round(price * qty, 2)
+    if u["balance"] < total:
         bot.answer_callback_query(
             call.id,
-            f"❌ Недостаточно средств!\nНужно: {price}$  |  Баланс: {u['balance']:.2f}$",
+            f"❌ Недостаточно средств!\nНужно: {total}$  |  Баланс: {u['balance']:.2f}$",
             show_alert=True
         )
         return
     conn = db()
     c_db = conn.cursor()
-    c_db.execute("UPDATE users SET balance=balance-? WHERE user_id=?", (price, u["user_id"]))
-    c_db.execute("UPDATE products SET stock=stock-1 WHERE id=?", (pid,))
+    c_db.execute("UPDATE users SET balance=balance-? WHERE user_id=?", (total, u["user_id"]))
+    c_db.execute("UPDATE products SET stock=stock-? WHERE id=?", (qty, pid))
     c_db.execute("INSERT INTO purchases (user_id,product_id,amount) VALUES (?,?,?)",
-                 (u["user_id"], pid, price))
+                 (u["user_id"], pid, total))
     conn.commit()
     conn.close()
-    new_balance = u["balance"] - price
+    new_balance = u["balance"] - total
     bot.edit_message_text(
         f"┌─────────────────────┐\n"
         f"│   ✅  <b>ПОКУПКА УСПЕШНА</b>   │\n"
         f"├─────────────────────┤\n"
         f"│ 📦 <b>Товар:</b>  <b>{name}</b>\n"
-        f"│ 💸 <b>Списано:</b>  <b>{price}$</b>\n"
-        f"│ 💎 <b>Остаток:</b>  <b>{new_balance:.2f}$</b>\n"
+        f"│ 🔢 <b>Количество:</b>  <b>{qty} шт.</b>\n"
+        f"│ 💸 <b>Списано:</b>  <b>{total}$</b>\n"
+        f"│ 💎 <b>Баланс:</b>  <b>{new_balance:.2f}$</b>\n"
         f"└─────────────────────┘",
         call.message.chat.id, call.message.message_id,
         parse_mode="HTML", reply_markup=kb_back()
@@ -590,11 +655,14 @@ def cb_adm_edit(call: types.CallbackQuery):
     pid = int(call.data.split("_")[2])
     p = get_product(pid)
     if not p: return
-    _, name, price, stock = p
+    _, name, price, stock, min_qty = p
     kb = types.InlineKeyboardMarkup()
     kb.row(
-        types.InlineKeyboardButton("💵 Изменить цену",    callback_data=f"adm_price_{pid}"),
-        types.InlineKeyboardButton("📦 Изменить остаток", callback_data=f"adm_stock_{pid}"),
+        types.InlineKeyboardButton("💵 Цена",    callback_data=f"adm_price_{pid}"),
+        types.InlineKeyboardButton("📦 Остаток", callback_data=f"adm_stock_{pid}"),
+    )
+    kb.row(
+        types.InlineKeyboardButton("🔢 Мин. кол-во", callback_data=f"adm_minqty_{pid}"),
     )
     kb.row(types.InlineKeyboardButton("🔙 Назад", callback_data="adm_products"))
     bot.edit_message_text(
@@ -604,6 +672,7 @@ def cb_adm_edit(call: types.CallbackQuery):
         f"│ 📦 <b>Товар:</b>  <b>{name}</b>\n"
         f"│ 💵 <b>Цена:</b>  <b>{price}$</b>\n"
         f"│ 📦 <b>Остаток:</b>  <b>{stock} шт.</b>\n"
+        f"│ 🔢 <b>Мин. покупка:</b>  <b>{min_qty} шт.</b>\n"
         f"└─────────────────────┘",
         call.message.chat.id, call.message.message_id,
         parse_mode="HTML", reply_markup=kb
