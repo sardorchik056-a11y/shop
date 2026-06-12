@@ -13,7 +13,7 @@ CRYPTO_TOKEN   = "582363:AALEf7JOugnrQyrkMHzH5UrO7pdOjjYnTQy"
 CRYPTO_API_URL = "https://pay.crypt.bot/api"
 
 ADMIN_IDS    = {8118184388}
-SUPPORT_URL  = "https://t.me/username"   # ← ссылка на поддержку
+SUPPORT_URL  = "https://t.me/Xeltryx"   # ← ссылка на поддержку
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -356,6 +356,25 @@ def cb_check(call: types.CallbackQuery):
                 call.message.chat.id, call.message.message_id,
                 parse_mode="HTML", reply_markup=kb_back()
             )
+            # уведомление всем админам
+            uname = f"@{u['username']}" if u['username'] != "—" else "без ника"
+            admin_text = (
+                f"┌─────────────────────┐\n"
+                f"│   💸  <b>ПОПОЛНЕНИЕ</b>         │\n"
+                f"├─────────────────────┤\n"
+                f"│ 👤 <b>Юзер:</b>  {u['full_name']}\n"
+                f"│ 📎 <b>Ник:</b>  {uname}\n"
+                f"│ 🆔 <b>ID:</b>  <code>{u['user_id']}</code>\n"
+                f"├─────────────────────┤\n"
+                f"│ 💰 <b>Сумма:</b>  <b>{row[1]} $</b>\n"
+                f"│ 💎 <b>Баланс:</b>  <b>{u['balance']:.2f} $</b>\n"
+                f"└─────────────────────┘"
+            )
+            for admin_id in ADMIN_IDS:
+                try:
+                    bot.send_message(admin_id, admin_text, parse_mode="HTML")
+                except:
+                    pass
         else:
             conn.close()
             bot.answer_callback_query(call.id, "✅ Уже зачислено ранее", show_alert=True)
