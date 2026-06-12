@@ -633,7 +633,7 @@ def cb_adm_products(call: types.CallbackQuery):
     products = get_products()
     kb = types.InlineKeyboardMarkup()
     for p in products:
-        pid, name, price, stock = p
+        pid, name, price, stock, min_qty = p
         kb.row(types.InlineKeyboardButton(
             f"✏️ {name}  |  {price}$  |  {stock} шт.",
             callback_data=f"adm_edit_{pid}"
@@ -695,6 +695,16 @@ def cb_adm_set_stock(call: types.CallbackQuery):
     admin_states[call.from_user.id] = {"action": "set_stock", "pid": pid}
     bot.edit_message_text(
         f"📦 <b>Введите новый остаток (шт.):</b>",
+        call.message.chat.id, call.message.message_id, parse_mode="HTML"
+    )
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("adm_minqty_"))
+def cb_adm_set_minqty(call: types.CallbackQuery):
+    if not is_admin(call.from_user.id): return
+    pid = int(call.data.split("_")[2])
+    admin_states[call.from_user.id] = {"action": "set_minqty", "pid": pid}
+    bot.edit_message_text(
+        f"🔢 <b>Введите минимальное количество для покупки (шт.):</b>",
         call.message.chat.id, call.message.message_id, parse_mode="HTML"
     )
 
@@ -773,6 +783,19 @@ def handle_admin_input(msg: types.Message):
                 parse_mode="HTML")
         except:
             bot.send_message(msg.chat.id, "❌ <b>Неверный формат. Введите целое число.</b>", parse_mode="HTML")
+
+    elif action == "set_minqty":
+        try:
+            min_qty = int(msg.text.strip())
+            if min_qty < 1:
+                raise ValueError
+            update_product(state["pid"], min_qty=min_qty)
+            p = get_product(state["pid"])
+            bot.send_message(msg.chat.id,
+                f"✅ <b>Мин. кол-во обновлено!</b>\n<b>{p[1]}</b>  →  <b>{p[4]} шт.</b>",
+                parse_mode="HTML")
+        except:
+            bot.send_message(msg.chat.id, "❌ <b>Неверный формат. Введите целое число ≥ 1.</b>", parse_mode="HTML")
 
     elif action == "topup":
         try:
