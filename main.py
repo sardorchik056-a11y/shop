@@ -69,7 +69,7 @@ def init_db():
         c.executemany("INSERT INTO products (id, name, price, stock) VALUES (?,?,?,?)", [
             (1, "Авторег", 5.0, 100),
             (2, "Токен",   5.0, 100),
-            (3, "QR-код",  5.0, 100),
+            (3, "Json",    5.0, 100),
         ])
     conn.commit()
     conn.close()
@@ -206,6 +206,16 @@ def check_invoice(invoice_id: str) -> str:
 
 LINE  = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
 LINE2 = "─ ─ ─ ─ ─ ─ ─ ─ ─ ─"
+
+# Эмодзи для каждого товара по названию
+PRODUCT_EMOJI = {
+    "Авторег": "🤖",
+    "Токен":   "🔑",
+    "Json":    "🗂",
+}
+
+def product_emoji(name: str) -> str:
+    return PRODUCT_EMOJI.get(name, "📦")
 
 def text_main(u):
     days  = days_in_project(u["joined"])
@@ -366,14 +376,16 @@ def cb_buy_menu(call: types.CallbackQuery):
 
     lines = ""
     for pid, name, price, stock, min_qty in products:
+        ico = product_emoji(name)
         status = "✅ В наличии" if stock > 0 else "❌ Нет"
-        lines += f"│ {'🛒' if stock > 0 else '🚫'} <b>{name}</b>\n│    💵 <b>{price}$</b>  •  📦 <b>{stock} шт.</b>  •  {status}\n"
+        lines += f"│ {ico} <b>{name}</b>\n│    💵 <b>{price}$</b>  •  📦 <b>{stock} шт.</b>  •  {status}\n"
 
     kb = types.InlineKeyboardMarkup()
     for pid, name, price, stock, min_qty in products:
+        ico = product_emoji(name)
         if stock > 0:
             kb.row(types.InlineKeyboardButton(
-                f"🛒 {name}  —  {price}$",
+                f"{ico} {name}  —  {price}$",
                 callback_data=f"product_{pid}"
             ))
         else:
@@ -404,6 +416,7 @@ def cb_product(call: types.CallbackQuery):
         bot.answer_callback_query(call.id, "Товар не найден", show_alert=True)
         return
     _, name, price, stock, min_qty = p
+    ico = product_emoji(name)
     avail = "✅ В наличии" if stock > 0 else "❌ Нет в наличии"
     total = round(price * min_qty, 2)
 
@@ -422,7 +435,7 @@ def cb_product(call: types.CallbackQuery):
 
     text = (
         f"┌─────────────────────┐\n"
-        f"│   📦  <b>{name}</b>\n"
+        f"│  {ico}  <b>{name}</b>\n"
         f"├─────────────────────┤\n"
         f"│ 💵 <b>Цена за 1 шт.:</b>  <b>{price}$</b>\n"
         f"│ 📦 <b>Остаток:</b>  <b>{stock} шт.</b>\n"
@@ -442,6 +455,7 @@ def cb_qty(call: types.CallbackQuery):
     if not p:
         return
     _, name, price, stock, min_qty = p
+    ico = product_emoji(name)
     # ограничения: не ниже min_qty, не выше stock
     qty = max(min_qty, min(qty, stock))
     total = round(price * qty, 2)
@@ -461,7 +475,7 @@ def cb_qty(call: types.CallbackQuery):
     avail = "✅ В наличии" if stock > 0 else "❌ Нет в наличии"
     text = (
         f"┌─────────────────────┐\n"
-        f"│   📦  <b>{name}</b>\n"
+        f"│  {ico}  <b>{name}</b>\n"
         f"├─────────────────────┤\n"
         f"│ 💵 <b>Цена за 1 шт.:</b>  <b>{price}$</b>\n"
         f"│ 📦 <b>Остаток:</b>  <b>{stock} шт.</b>\n"
@@ -487,6 +501,7 @@ def cb_confirm(call: types.CallbackQuery):
         bot.answer_callback_query(call.id, "❌ Недостаточно товара на складе", show_alert=True)
         return
     _, name, price, stock, min_qty = p
+    ico = product_emoji(name)
     total = round(price * qty, 2)
     if u["balance"] < total:
         bot.answer_callback_query(
@@ -508,7 +523,7 @@ def cb_confirm(call: types.CallbackQuery):
         f"┌─────────────────────┐\n"
         f"│   ✅  <b>ПОКУПКА УСПЕШНА</b>   │\n"
         f"├─────────────────────┤\n"
-        f"│ 📦 <b>Товар:</b>  <b>{name}</b>\n"
+        f"│ {ico} <b>Товар:</b>  <b>{name}</b>\n"
         f"│ 🔢 <b>Количество:</b>  <b>{qty} шт.</b>\n"
         f"│ 💸 <b>Списано:</b>  <b>{total}$</b>\n"
         f"│ 💎 <b>Баланс:</b>  <b>{new_balance:.2f}$</b>\n"
